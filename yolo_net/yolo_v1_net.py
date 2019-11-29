@@ -12,10 +12,22 @@ from keras.layers import LeakyReLU
 from keras.models import Model
 from keras.regularizers import l2
 from keras.initializers import he_normal as initial
+from keras.optimizers import Adam
+
+from keras.callbacks import ModelCheckpoint
+
+from math import ceil
+import os
+
+from yolo_net.yolo_v1_utils import YoloUtils
 
 
 class yolov1:
-    def __init__(self, S=7, B=2, w_decay=1e-4, leaky_alpha=0.1, dropout_rate=0.5):
+    def __init__(self, S=7, B=2,
+                 num_classes=20, BatchSize=128,
+                 w_decay=1e-4,
+                 leaky_alpha=0.1,
+                 dropout_rate=0.5):
         '''
         initial method of yolov1.
         :param S: # of grid;
@@ -25,7 +37,8 @@ class yolov1:
         :param dropout_rate: dropout rate;
         '''
         self.input_shape = (448, 448, 3,)
-        self.num_classes = 20
+        self.num_classes = num_classes
+        self.BatchSize = BatchSize
         self.w_decay = w_decay
         self.alpha = leaky_alpha
         self.dropout_rate = dropout_rate
@@ -41,39 +54,40 @@ class yolov1:
         '''
         net = {}
         net['input'] = Input(self.input_shape)
-        net['conv1'] = Conv2D(64, 7, 2,
+        net['conv1'] = Conv2D(64, (7, 7),
+                              strides=2,
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
                               )(net['input'])
         net['conv1'] = LeakyReLU(self.alpha)(net['conv1'])
         net['mp1'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv1'])
-        net['conv2'] = Conv2D(192, 3,
+        net['conv2'] = Conv2D(192, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
                               )(net['mp1'])
         net['conv2'] = LeakyReLU(self.alpha)(net['conv2'])
         net['mp2'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv2'])
-        net['conv3'] = Conv2D(128, 1,
+        net['conv3'] = Conv2D(128, (1, 1),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
                               )(net['mp2'])
         net['conv3'] = LeakyReLU(self.alpha)(net['conv3'])
-        net['conv4'] = Conv2D(256, 3,
+        net['conv4'] = Conv2D(256, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
                               )(net['conv3'])
         net['conv4'] = LeakyReLU(self.alpha)(net['conv4'])
-        net['conv5'] = Conv2D(256, 1,
+        net['conv5'] = Conv2D(256, (1, 1),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
                               )(net['conv4'])
         net['conv5'] = LeakyReLU(self.alpha)(net['conv5'])
-        net['conv6'] = Conv2D(512, 3,
+        net['conv6'] = Conv2D(512, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
@@ -82,26 +96,26 @@ class yolov1:
         net['mp6'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv6'])
         mid = net['mp6']
         for i in range(4):
-            mid = Conv2D(256, 1,
+            mid = Conv2D(256, (1, 1),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
                          )(mid)
             mid = LeakyReLU(self.alpha)(mid)
-            mid = Conv2D(512, 3,
+            mid = Conv2D(512, (3, 3),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
                          )(mid)
             mid = LeakyReLU(self.alpha)(mid)
         net['conv714'] = mid
-        net['conv15'] = Conv2D(512, 1,
+        net['conv15'] = Conv2D(512, (1, 1),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
                                )(net['conv714'])
         net['conv15'] = LeakyReLU(self.alpha)(net['conv15'])
-        net['conv16'] = Conv2D(1024, 3,
+        net['conv16'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
@@ -110,20 +124,20 @@ class yolov1:
         net['mp16'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv16'])
         mid = net['mp16']
         for i in range(2):
-            mid = Conv2D(512, 1,
+            mid = Conv2D(512, (1, 1),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
                          )(mid)
             mid = LeakyReLU(self.alpha)(mid)
-            mid = Conv2D(1024, 3,
+            mid = Conv2D(1024, (3, 3),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
                          )(mid)
             mid = LeakyReLU(self.alpha)(mid)
         net['conv1720'] = mid
-        net['conv21'] = Conv2D(1024, 3,
+        net['conv21'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
@@ -135,13 +149,13 @@ class yolov1:
                                kernel_initializer=initial(),
                                )(net['conv21'])
         net['conv22'] = LeakyReLU(self.alpha)(net['conv22'])
-        net['conv23'] = Conv2D(1024, 3,
+        net['conv23'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
                                )(net['conv22'])
         net['conv23'] = LeakyReLU(self.alpha)(net['conv23'])
-        net['conv24'] = Conv2D(1024, 3,
+        net['conv24'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
@@ -155,3 +169,27 @@ class yolov1:
         net['output'] = net['fc26']
         model = Model(net['input'], net['output'])
         return model
+
+    def train(self, pascal, epochs, lr):
+        checkpoint = './history/YOLOv1_weight.h5'
+        yoloutils = YoloUtils(self.num_classes, batch_size=self.BatchSize)
+        model = self.yolov1_net()
+        loss = yoloutils.loss_layer
+        opt = Adam(lr)
+        callback = ModelCheckpoint(checkpoint, verbose=1,
+                                   save_best_only=True,
+                                   save_weights_only=True)
+
+        length = pascal.get_len()
+        step = ceil(length / self.BatchSize)
+        model.compile(optimizer=opt, loss=loss, metrics=['accuracy'])
+
+        if os.path.isfile(checkpoint):
+            model.load_weights(checkpoint)
+
+        model.fit_generator(pascal.generator(),
+                            steps_per_epoch=step,
+                            epochs=epochs,
+                            verbose=1,
+                            callbacks=[callback],
+                            )

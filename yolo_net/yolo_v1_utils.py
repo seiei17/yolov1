@@ -1,10 +1,11 @@
 '''yolo v1 utils'''
 
+import keras.backend as K
 import numpy as np
 import tensorflow as tf
 
 
-class YoloUtil(object):
+class YoloUtils(object):
     '''
     bounding box utils.
 
@@ -12,13 +13,13 @@ class YoloUtil(object):
         num_classes: Number of classes except background;
         nms_threshold: threshold of nms;
     '''
-    def __init__(self, num_classes, nms_threshold, top_k,
+    def __init__(self, num_classes,
+                 batch_size,
                  S=7, B=2,
                  obj_scale=1.0, noobj_scale=.5,
                  coord_scale=5.0, class_scale=1.0):
         self.num_classes = num_classes
-        self._nms_threshold = nms_threshold
-        self._top_k = top_k
+        self.batch_size = batch_size
         self.S = S
         self.B = B
         self.object_scale = obj_scale
@@ -27,34 +28,6 @@ class YoloUtil(object):
         self.class_scale = class_scale
         self.boundary1 =self.S * self.S* self.num_classes
         self.boundary2 =self.boundary1 +self.S * self.S * self.B
-
-
-        self.boxes = tf.placeholder(dtype='float32', shape=(None, 4))
-        self.scores = tf.placeholder(dtype='float32', shape=(None,))
-        self.nms = tf.image.non_max_suppression(self.boxes, self.scores,
-                                                self._top_k,
-                                                self._nms_threshold)
-        self.sess = tf.Session()
-
-    @property
-    def nms_threshold(self):
-        return self._nms_threshold
-    @nms_threshold.setter
-    def nms_threshold(self, value):
-        self._nms_threshold = value
-        self.nms = tf.image.non_max_suppression(self.boxes, self.scores,
-                                                self._top_k,
-                                                self._nms_threshold)
-
-    @property
-    def top_k(self):
-        return self._top_k
-    @top_k.setter
-    def top_k(self,value):
-        self._top_k = value
-        self.nms = tf.image.non_max_suppression(self.boxes, self.scores,
-                                                self._top_k,
-                                                self._nms_threshold)
 
     def iou(self, box1, box2):
         '''
@@ -93,27 +66,27 @@ class YoloUtil(object):
         # Limiting the value into (0, 1).
         return tf.clip_by_value(inter_area / union_area, 0.0, 1.0)
 
-    def loss_layer(self, predicts, labels):
-        size = labels.shape[0]
-        predict_classes = tf.reshape(predicts[:, :self.boundary1],
+    def loss_layer(self, labels, predicts):
+        predict_classes = K.reshape(predicts[:, :self.boundary1],
                                      (-1, self.S, self.S, self.num_classes))
-        predict_conf = tf.reshape(predicts[:, self.boundary1: self.boundary2],
+        predict_conf = K.reshape(predicts[:, self.boundary1: self.boundary2],
                                   (-1, self.S, self.S, self.B))
-        predict_box = tf.reshape(predicts[:, self.boundary2:],
+        predict_box = K.reshape(predicts[:, self.boundary2:],
                                  (-1, self.S, self.S, self.B, 4))
 
-        labels_response = tf.reshape(labels[:, :, :, 0],
-                                    (-1, self.S, self.S, 1))
-        labels_box = tf.reshape(labels[:, :, :, 1: 5],
-                                (-1, self.S, self.S, 1, 4)) # shape is (, 7, 7, 1, 4)
-        labels_box = tf.tile(labels_box, [1, 1, 1, self.B, 1]) # shape is (, 7, 7, 2, 4)
-        labels_classes = labels[:, :, :, 5:]
+        labels_classes = K.reshape(labels[:, :self.boundary1],
+                                  (-1, self.S, self.S, self.num_classes))
+        labels_responses = K.reshape(labels[:, self.boundary1: self.boundary2],
+                                     (-1, self.S, self.S, self.B))
+        labels_response = labels_responses[:, :, :, 0]
+        labels_box = K.reshape(labels[:, self.boundary2:],
+                               (-1, self.S, self.S, self.B, 4))
 
         offset = np.transpose(np.reshape(np.array([np.arange(self.S)] * self.S * self.B),
                               (self.B, self.S, self.S)), (1, 2, 0))
-        offset = tf.reshape(tf.constant(offset, dtype='float32'),
+        offset = K.reshape(tf.constant(offset, dtype='float32'),
                             [1, self.S, self.S, self.B])
-        offset_x = tf.tile(offset, [size, 1, 1, 1])
+        offset_x = tf.tile(offset, [self.batch_size, 1, 1, 1])
         offset_y = tf.transpose(offset_x, (0, 2, 1, 3))
 
         predict_box_tran = tf.stack([(predict_box[:, :, :, :, 0] + offset_x) / self.S,
@@ -128,7 +101,7 @@ class YoloUtil(object):
         # shape is (, S, S, 1)
         object_mask = tf.reduce_max(iou_preditct_truth, axis=-1, keep_dims=True)
         # shape is (, S, S, B)
-        object_mask = tf.cast((iou_preditct_truth >= object_mask), tf.float32) * labels_response
+        object_mask = tf.cast((iou_preditct_truth >= object_mask), tf.float32) * labels_responses
 
         # Calculating no-I tensor (, S, S, B)
         noobject_mask = tf.ones_like(object_mask, dtype=tf.float32) - object_mask
@@ -139,8 +112,8 @@ class YoloUtil(object):
                                      tf.sqrt(labels_box[:, :, :, :, 3])], axis=-1)
 
         # loss of class
-        class_differ = (predict_classes - labels_classes) * labels_response
-        class_loss = tf.reduce_mean(tf.reduce_sum(tf.square(class_differ), axis=[1, 2, 3])) * self.class_scale
+        class_differ = tf.reduce_sum(tf.square(predict_classes - labels_classes)) * labels_response
+        class_loss = tf.reduce_mean(class_differ, axis=[1, 2]) * self.class_scale
 
         # object loss
         object_differ = (predict_conf - iou_preditct_truth) * object_mask
@@ -156,7 +129,5 @@ class YoloUtil(object):
         coord_differ = (predict_box - labels_box_trans) * coord_mask
         coord_loss = tf.reduce_mean(tf.reduce_sum(tf.square(coord_differ), axis=[1, 2, 3, 4])) * self.coord_scale
 
-        tf.losses.add_loss(class_loss)
-        tf.losses.add_loss(object_loss)
-        tf.losses.add_loss(noobject_loss)
-        tf.losses.add_loss(coord_loss)
+        total_loss = class_loss + object_loss + noobject_loss + coord_loss
+        return total_loss
