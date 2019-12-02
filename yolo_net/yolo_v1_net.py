@@ -8,6 +8,8 @@ from keras.layers import Dense
 from keras.layers import Input
 from keras.layers import Dropout
 from keras.layers import LeakyReLU
+from keras.layers import BatchNormalization
+from keras.layers import ZeroPadding2D
 
 from keras.models import Model
 from keras.regularizers import l2
@@ -59,115 +61,183 @@ class yolov1:
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
+                              use_bias=False,
                               )(net['input'])
-        net['conv1'] = LeakyReLU(self.alpha)(net['conv1'])
-        net['mp1'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv1'])
+        net['bn1'] = BatchNormalization(axis=3)(net['conv1'])
+        net['lr1'] = LeakyReLU(self.alpha)(net['bn1'])
+        net['mp1'] = MaxPool2D((2, 2), strides=2, padding='same')(net['lr1'])
+
         net['conv2'] = Conv2D(192, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
+                              use_bias=False,
                               )(net['mp1'])
-        net['conv2'] = LeakyReLU(self.alpha)(net['conv2'])
-        net['mp2'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv2'])
+        net['bn2'] = BatchNormalization(axis=3)(net['conv2'])
+        net['lr2'] = LeakyReLU(self.alpha)(net['bn2'])
+        net['mp2'] = MaxPool2D((2, 2), strides=2, padding='same')(net['lr2'])
+
         net['conv3'] = Conv2D(128, (1, 1),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
+                              use_bias=False,
                               )(net['mp2'])
-        net['conv3'] = LeakyReLU(self.alpha)(net['conv3'])
+        net['bn3'] = BatchNormalization(axis=3)(net['conv3'])
+        net['lr3'] = LeakyReLU(self.alpha)(net['bn3'])
+
         net['conv4'] = Conv2D(256, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
-                              )(net['conv3'])
-        net['conv4'] = LeakyReLU(self.alpha)(net['conv4'])
+                              use_bias=False,
+                              )(net['lr3'])
+        net['bn4'] = BatchNormalization(axis=3)(net['conv4'])
+        net['lr4'] = LeakyReLU(self.alpha)(net['bn4'])
+
         net['conv5'] = Conv2D(256, (1, 1),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
-                              )(net['conv4'])
-        net['conv5'] = LeakyReLU(self.alpha)(net['conv5'])
+                              use_bias=False,
+                              )(net['lr4'])
+        net['bn5'] = BatchNormalization(axis=3)(net['conv5'])
+        net['lr5'] = LeakyReLU(self.alpha)(net['bn5'])
+
         net['conv6'] = Conv2D(512, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
-                              )(net['conv5'])
-        net['conv6'] = LeakyReLU(self.alpha)(net['conv6'])
-        net['mp6'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv6'])
+                              use_bias=False,
+                              )(net['lr5'])
+        net['bn6'] = BatchNormalization(axis=3)(net['conv6'])
+        net['lr6'] = LeakyReLU(self.alpha)(net['bn6'])
+        net['mp6'] = MaxPool2D((2, 2), strides=2, padding='same')(net['lr6'])
         mid = net['mp6']
         for i in range(4):
             mid = Conv2D(256, (1, 1),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
+                         use_bias=False,
                          )(mid)
+            mid = BatchNormalization(axis=3)(mid)
             mid = LeakyReLU(self.alpha)(mid)
+
             mid = Conv2D(512, (3, 3),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
+                         use_bias=False,
                          )(mid)
+            mid = BatchNormalization(axis=3)(mid)
             mid = LeakyReLU(self.alpha)(mid)
         net['conv714'] = mid
         net['conv15'] = Conv2D(512, (1, 1),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
+                               use_bias=False,
                                )(net['conv714'])
-        net['conv15'] = LeakyReLU(self.alpha)(net['conv15'])
+        net['bn15'] = BatchNormalization(axis=3)(net['conv15'])
+        net['lr15'] = LeakyReLU(self.alpha)(net['bn15'])
+
         net['conv16'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
-                               )(net['conv15'])
-        net['conv16'] = LeakyReLU(self.alpha)(net['conv16'])
-        net['mp16'] = MaxPool2D((2, 2), strides=2, padding='same')(net['conv16'])
+                               use_bias=False,
+                               )(net['lr15'])
+        net['bn16'] = BatchNormalization(axis=3)(net['conv16'])
+        net['lr16'] = LeakyReLU(self.alpha)(net['bn16'])
+        net['mp16'] = MaxPool2D((2, 2), strides=2, padding='same')(net['lr16'])
+
         mid = net['mp16']
         for i in range(2):
             mid = Conv2D(512, (1, 1),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
+                         use_bias=False,
                          )(mid)
+            mid = BatchNormalization(axis=3)(mid)
             mid = LeakyReLU(self.alpha)(mid)
+
             mid = Conv2D(1024, (3, 3),
                          padding='same',
                          kernel_regularizer=l2(self.w_decay),
                          kernel_initializer=initial(),
+                         use_bias=False,
                          )(mid)
+            mid = BatchNormalization(axis=3)(mid)
             mid = LeakyReLU(self.alpha)(mid)
         net['conv1720'] = mid
         net['conv21'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
+                               use_bias=False,
                                )(net['conv1720'])
-        net['conv21'] = LeakyReLU(self.alpha)(net['conv21'])
-        net['conv22'] = Conv2D(2014, 3, strides=2,
+        net['bn21'] = BatchNormalization(axis=3)(net['conv21'])
+        net['lr21'] = LeakyReLU(self.alpha)(net['bn21'])
+
+        net['conv22'] = Conv2D(1024, (3, 3), strides=2,
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
-                               )(net['conv21'])
-        net['conv22'] = LeakyReLU(self.alpha)(net['conv22'])
+                               use_bias=False,
+                               )(net['lr21'])
+        net['bn22'] = BatchNormalization(axis=3)(net['conv22'])
+        net['lr22'] = LeakyReLU(self.alpha)(net['bn22'])
+
         net['conv23'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
-                               )(net['conv22'])
-        net['conv23'] = LeakyReLU(self.alpha)(net['conv23'])
+                               use_bias=False,
+                               )(net['lr22'])
+        net['bn23'] = BatchNormalization(axis=3)(net['conv23'])
+        net['lr23'] = LeakyReLU(self.alpha)(net['bn23'])
+
         net['conv24'] = Conv2D(1024, (3, 3),
                                padding='same',
                                kernel_regularizer=l2(self.w_decay),
                                kernel_initializer=initial(),
-                               )(net['conv23'])
-        net['conv24'] = LeakyReLU(self.alpha)(net['conv24'])
-        net['flat'] = Flatten()(net['conv24'])
-        net['fc25'] = Dense(4096)(net['flat'])
-        net['fc25'] = LeakyReLU(self.alpha)(net['fc25'])
-        net['dropout'] = Dropout(self.dropout_rate)(net['fc25'])
-        net['fc26'] = Dense(self.output_size, activation='linear')(net['dropout'])
-        net['output'] = net['fc26']
+                               use_bias=False,
+                               )(net['lr23'])
+        net['bn24'] = BatchNormalization(axis=3)(net['conv24'])
+        net['lr24'] = LeakyReLU(self.alpha)(net['bn24'])
+
+        # fc 版本
+        # net['flat'] = Flatten()(net['lr24'])
+        # net['flat'] = Dense(512)(net['flat'])
+        # net['flat'] = LeakyReLU(self.alpha)(net['flat'])
+        # net['fc25'] = Dense(4096)(net['flat'])
+        # net['fc25'] = LeakyReLU(self.alpha)(net['fc25'])
+        # net['dropout'] = Dropout(self.dropout_rate)(net['fc25'])
+        # net['fc26'] = Dense(self.output_size, activation='linear')(net['dropout'])
+        # net['output'] = net['fc26']
+        net['conv25'] = Conv2D(256, (1, 1),
+                               padding='same',
+                               kernel_regularizer=l2(self.w_decay),
+                               kernel_initializer=initial(),
+                               use_bias=False,
+                               )(net['lr24'])
+        net['bn25'] = BatchNormalization(axis=3)(net['conv25'])
+        net['lr25'] = LeakyReLU(self.alpha)(net['bn25'])
+
+        net['dropout'] = Dropout(self.dropout_rate)(net['lr25'])
+
+        net['conv26'] = Conv2D(30, (1, 1),
+                               padding='same',
+                               activation='linear',
+                               kernel_regularizer=l2(self.w_decay),
+                               kernel_initializer=initial(),
+                               )(net['dropout'])
+        net['output'] = net['conv26']
+
         model = Model(net['input'], net['output'])
+        model.summary()
         return model
 
     def train(self, pascal, epochs, lr):
@@ -176,19 +246,23 @@ class yolov1:
         model = self.yolov1_net()
         loss = yoloutils.loss_layer
         opt = Adam(lr)
-        callback = ModelCheckpoint(checkpoint, verbose=1,
+        callback = ModelCheckpoint(checkpoint,
+                                   monitor='accuracy',
+                                   verbose=1,
                                    save_best_only=True,
                                    save_weights_only=True)
 
-        length = pascal.get_len()
+        length = pascal.len
         step = ceil(length / self.BatchSize)
         model.compile(optimizer=opt, loss=loss, metrics=['accuracy'])
 
         if os.path.isfile(checkpoint):
-            model.load_weights(checkpoint)
+            print('---\nload weights from {}\n----'.format(checkpoint))
+            model.load_weights(checkpoint, by_name=True)
+
 
         model.fit_generator(pascal.generator(),
-                            steps_per_epoch=step,
+                            step,
                             epochs=epochs,
                             verbose=1,
                             callbacks=[callback],
