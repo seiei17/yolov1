@@ -1,6 +1,6 @@
 
 from yolo_net.yolo_v1_net import yolov1
-from utils.pascal_voc_1x1 import pascal_voc
+from utils.pascal_voc_fc import pascal_voc
 
 PASCAL_PATH = '../../database/'
 
@@ -8,7 +8,7 @@ lr = 0.001
 # epochs = 15000
 BatchSize = 32
 num_epoch = 0
-w_decay = 0.0005
+w_decay = 0.001
 # epochs = [0, 2000, 8000, 12000, 14000, 15000]
 #
 #
@@ -36,4 +36,4 @@ w_decay = 0.0005
 net = yolov1(BatchSize=BatchSize, w_decay=w_decay)
 pascal = pascal_voc(PASCAL_PATH=PASCAL_PATH, TrainOrTest='train', BatchSize=BatchSize)
 print('------------\nnow begin training\n-------------')
-net.train(pascal, epochs=200, lr=lr)
+net.train(pascal, epochs=300, lr=lr)

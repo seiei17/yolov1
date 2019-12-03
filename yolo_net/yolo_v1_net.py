@@ -9,7 +9,6 @@ from keras.layers import Input
 from keras.layers import Dropout
 from keras.layers import LeakyReLU
 from keras.layers import BatchNormalization
-from keras.layers import ZeroPadding2D
 
 from keras.models import Model
 from keras.regularizers import l2
@@ -25,7 +24,7 @@ from yolo_net.yolo_v1_utils import YoloUtils
 
 
 class yolov1:
-    def __init__(self, S=7, B=2,
+    def __init__(self, S=7, B=3,
                  num_classes=20, BatchSize=128,
                  w_decay=1e-4,
                  leaky_alpha=0.1,
@@ -209,32 +208,34 @@ class yolov1:
         net['lr24'] = LeakyReLU(self.alpha)(net['bn24'])
 
         # fc 版本
-        # net['flat'] = Flatten()(net['lr24'])
-        # net['flat'] = Dense(512)(net['flat'])
-        # net['flat'] = LeakyReLU(self.alpha)(net['flat'])
-        # net['fc25'] = Dense(4096)(net['flat'])
-        # net['fc25'] = LeakyReLU(self.alpha)(net['fc25'])
-        # net['dropout'] = Dropout(self.dropout_rate)(net['fc25'])
-        # net['fc26'] = Dense(self.output_size, activation='linear')(net['dropout'])
-        # net['output'] = net['fc26']
-        net['conv25'] = Conv2D(256, (1, 1),
-                               padding='same',
-                               kernel_regularizer=l2(self.w_decay),
-                               kernel_initializer=initial(),
-                               use_bias=False,
-                               )(net['lr24'])
-        net['bn25'] = BatchNormalization(axis=3)(net['conv25'])
-        net['lr25'] = LeakyReLU(self.alpha)(net['bn25'])
-
-        net['dropout'] = Dropout(self.dropout_rate)(net['lr25'])
-
-        net['conv26'] = Conv2D(30, (1, 1),
-                               padding='same',
-                               activation='linear',
-                               kernel_regularizer=l2(self.w_decay),
-                               kernel_initializer=initial(),
-                               )(net['dropout'])
-        net['output'] = net['conv26']
+        net['local_conv'] = Conv2D(256, (3, 3),
+                              padding='same',
+                              kernel_regularizer=l2(self.w_decay),
+                              kernel_initializer=initial(),
+                              )(net['lr24'])
+        net['local_lr'] = LeakyReLU(self.alpha)(net['local_conv'])
+        net['flat'] = Flatten()(net['local_lr'])
+        net['dropout'] = Dropout(self.dropout_rate)(net['flat'])
+        net['fc26'] = Dense(self.output_size, activation='linear')(net['dropout'])
+        net['output'] = net['fc26']
+        # net['conv25'] = Conv2D(256, (1, 1),
+        #                        padding='same',
+        #                        kernel_regularizer=l2(self.w_decay),
+        #                        kernel_initializer=initial(),
+        #                        use_bias=False,
+        #                        )(net['lr24'])
+        # net['bn25'] = BatchNormalization(axis=3)(net['conv25'])
+        # net['lr25'] = LeakyReLU(self.alpha)(net['bn25'])
+        #
+        # net['dropout'] = Dropout(self.dropout_rate)(net['lr25'])
+        #
+        # net['conv26'] = Conv2D(30, (1, 1),
+        #                        padding='same',
+        #                        activation='linear',
+        #                        kernel_regularizer=l2(self.w_decay),
+        #                        kernel_initializer=initial(),
+        #                        )(net['dropout'])
+        # net['output'] = net['conv26']
 
         model = Model(net['input'], net['output'])
         model.summary()

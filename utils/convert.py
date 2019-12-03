@@ -230,7 +230,96 @@ def _main(args):
             pass
 
         elif section.startswith('local'):
-            pass
+            filters = int(cfg_parser[section]['filters'])
+            size = int(cfg_parser[section]['size'])
+            stride = int(cfg_parser[section]['stride'])
+            pad = int(cfg_parser[section]['pad'])
+            activation = cfg_parser[section]['activation']
+            batch_normalize = 'batch_normalize' in cfg_parser[section]
+
+            padding = 'same' if pad == 1 and stride == 1 else 'valid'
+
+            # Setting weights.
+            # Darknet serializes convolutional weights as:
+            # [bias/beta, [gamma, mean, variance], conv_weights]
+            prev_layer_shape = K.int_shape(prev_layer)
+
+            weights_shape = (size, size, prev_layer_shape[-1], filters)
+            darknet_w_shape = (filters, weights_shape[2], size, size)
+            weights_size = np.product(weights_shape)
+
+            print('conv2d', 'bn'
+            if batch_normalize else '  ', activation, weights_shape)
+
+            conv_bias = np.ndarray(
+                shape=(filters,),
+                dtype='float32',
+                buffer=weights_file.read(filters * 4),
+            )
+            count += filters
+
+            if batch_normalize:
+                bn_weights = np.ndarray(
+                    shape=(3, filters),
+                    dtype='float32',
+                    buffer=weights_file.read(filters * 12))
+                count += 3 * filters
+
+                bn_weight_list = [
+                    bn_weights[0],  # scale gamma
+                    conv_bias,  # shift beta
+                    bn_weights[1],  # running mean
+                    bn_weights[2]  # running var
+                ]
+
+            conv_weights = np.ndarray(
+                shape=darknet_w_shape,
+                dtype='float32',
+                buffer=weights_file.read(weights_size * 4))
+            count += weights_size
+
+            # DarkNet conv_weights are serialized Caffe-style:
+            # (out_dim, in_dim, height, width)
+            # We would like to set these to Tensorflow order:
+            # (height, width, in_dim, out_dim)
+            conv_weights = np.transpose(conv_weights, [2, 3, 1, 0])
+            conv_weights = [conv_weights] if batch_normalize else [
+                conv_weights, conv_bias
+            ]
+
+            # Handle activation.
+            act_fn = None
+            if activation == 'leaky':
+                pass  # Add advanced activation later.
+            elif activation != 'linear':
+                raise ValueError(
+                    'Unknown activation function `{}` in section {}'.format(
+                        activation, section))
+
+            # Create Conv2D layer
+            if stride > 1:
+                # Darknet uses left and top padding instead of 'same' mode
+                prev_layer = ZeroPadding2D(((1, 0), (1, 0)))(prev_layer)
+            conv_layer = (Conv2D(
+                filters, (size, size),
+                strides=(stride, stride),
+                kernel_regularizer=l2(weight_decay),
+                use_bias=not batch_normalize,
+                weights=conv_weights,
+                activation=act_fn,
+                padding=padding))(prev_layer)
+
+            if batch_normalize:
+                conv_layer = (BatchNormalization(
+                    weights=bn_weight_list))(conv_layer)
+            prev_layer = conv_layer
+
+            if activation == 'linear':
+                all_layers.append(prev_layer)
+            elif activation == 'leaky':
+                act_layer = LeakyReLU(alpha=0.1)(prev_layer)
+                prev_layer = act_layer
+                all_layers.append(act_layer)
 
         elif section.startswith('dropout'):
             pass

@@ -16,7 +16,7 @@ class YoloUtils(object):
 
     def __init__(self, num_classes,
                  batch_size,
-                 S=7, B=2,
+                 S=7, B=3,
                  obj_scale=1.0, noobj_scale=.5,
                  coord_scale=5.0, class_scale=1.0):
         self.num_classes = num_classes
@@ -68,35 +68,35 @@ class YoloUtils(object):
         return tf.clip_by_value(inter_area / union_area, 0.0, 1.0)
 
     def loss_layer(self, labels, predicts):
-        # predict_classes = K.reshape(predicts[:, :self.boundary1],
-        #                              (-1, self.S, self.S, self.num_classes))
-        # predict_conf = K.reshape(predicts[:, self.boundary1: self.boundary2],
-        #                           (-1, self.S, self.S, self.B))
-        # predict_box = K.reshape(predicts[:, self.boundary2:],
-        #                          (-1, self.S, self.S, self.B, 4))
-        #
-        # labels_classes = K.reshape(labels[:, :self.boundary1],
-        #                           (-1, self.S, self.S, self.num_classes))
-        # labels_responses = K.reshape(labels[:, self.boundary1: self.boundary2],
-        #                              (-1, self.S, self.S, self.B))
-        # labels_response = labels_responses[:, :, :, 0]
-        # labels_box = K.reshape(labels[:, self.boundary2:],
-        #                        (-1, self.S, self.S, self.B, 4))
+        predict_classes = K.reshape(predicts[:, :self.boundary1],
+                                     (-1, self.S, self.S, self.num_classes))
+        predict_conf = K.reshape(predicts[:, self.boundary1: self.boundary2],
+                                  (-1, self.S, self.S, self.B))
+        predict_box = K.reshape(predicts[:, self.boundary2:],
+                                 (-1, self.S, self.S, self.B, 4))
 
-        predict_conf = K.concatenate([K.reshape(predicts[:, :, :, 0], (-1, self.S, self.S, 1)),
-                                      K.reshape(predicts[:, :, :, 5], (-1, self.S, self.S, 1))],
-                                     axis=3)
-        predict_box = K.reshape(K.concatenate([predicts[:, :, :, 1:5], predicts[:, :, :, 6:10]], axis=1),
-                                (-1, self.S, self.S, self.B, 4))
-        predict_classes = predicts[:, :, :, 10:]
-
-        labels_responses = K.concatenate([K.reshape(labels[:, :, :, 0], (-1, self.S, self.S, 1)),
-                                          K.reshape(labels[:, :, :, 5], (-1, self.S, self.S, 1))],
-                                         axis=3)
+        labels_classes = K.reshape(labels[:, :self.boundary1],
+                                  (-1, self.S, self.S, self.num_classes))
+        labels_responses = K.reshape(labels[:, self.boundary1: self.boundary2],
+                                     (-1, self.S, self.S, self.B))
         labels_response = labels_responses[:, :, :, 0]
-        labels_box = K.reshape(K.concatenate([labels[:, :, :, 1:5], labels[:, :, :, 6:10]], axis=1),
+        labels_box = K.reshape(labels[:, self.boundary2:],
                                (-1, self.S, self.S, self.B, 4))
-        labels_classes = labels[:, :, :, 10:]
+
+        # predict_conf = K.concatenate([K.reshape(predicts[:, :, :, 0], (-1, self.S, self.S, 1)),
+        #                               K.reshape(predicts[:, :, :, 5], (-1, self.S, self.S, 1))],
+        #                              axis=3)
+        # predict_box = K.reshape(K.concatenate([predicts[:, :, :, 1:5], predicts[:, :, :, 6:10]], axis=1),
+        #                         (-1, self.S, self.S, self.B, 4))
+        # predict_classes = predicts[:, :, :, 10:]
+        #
+        # labels_responses = K.concatenate([K.reshape(labels[:, :, :, 0], (-1, self.S, self.S, 1)),
+        #                                   K.reshape(labels[:, :, :, 5], (-1, self.S, self.S, 1))],
+        #                                  axis=3)
+        # labels_response = labels_responses[:, :, :, 0]
+        # labels_box = K.reshape(K.concatenate([labels[:, :, :, 1:5], labels[:, :, :, 6:10]], axis=1),
+        #                        (-1, self.S, self.S, self.B, 4))
+        # labels_classes = labels[:, :, :, 10:]
 
         offset = np.transpose(np.reshape(np.array([np.arange(self.S)] * self.S * self.B),
                                          (self.B, self.S, self.S)), (1, 2, 0))
