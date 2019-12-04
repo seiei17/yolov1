@@ -214,7 +214,13 @@ class yolov1:
                               kernel_initializer=initial(),
                               )(net['lr24'])
         net['local_lr'] = LeakyReLU(self.alpha)(net['local_conv'])
-        net['flat'] = Flatten()(net['local_lr'])
+        net['reduce_conv'] = Conv2D(128, (1, 1),
+                                    padding='same',
+                                    kernel_regularizer=l2(self.w_decay),
+                                    kernel_initializer=initial(),
+                                    )(net['local_lr'])
+        net['reduce_lr'] = LeakyReLU(self.alpha)(net['reduce_conv'])
+        net['flat'] = Flatten()(net['reduce_lr'])
         net['dropout'] = Dropout(self.dropout_rate)(net['flat'])
         net['fc26'] = Dense(self.output_size, activation='linear')(net['dropout'])
         net['output'] = net['fc26']
@@ -243,7 +249,7 @@ class yolov1:
 
     def train(self, pascal, epochs, lr):
         checkpoint = './history/YOLOv1_weight.h5'
-        yoloutils = YoloUtils(self.num_classes, batch_size=self.BatchSize)
+        yoloutils = YoloUtils(self.num_classes, B=self.B, batch_size=self.BatchSize)
         model = self.yolov1_net()
         loss = yoloutils.loss_layer
         opt = Adam(lr)

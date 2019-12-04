@@ -11,7 +11,7 @@ CLASSES = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus',
            'train', 'tvmonitor']
 
 class pascal_voc(object):
-    def __init__(self, PASCAL_PATH, TrainOrTest, BatchSize, S=7, B=3, FLIPPED=True, REBUILD=False):
+    def __init__(self, PASCAL_PATH, TrainOrTest, BatchSize, S=7, B=2, FLIPPED=True, REBUILD=False):
         self.pascal_path = PASCAL_PATH
         self.devkit_path = os.path.join(self.pascal_path, 'VOCdevkit')
         self.data_path = os.path.join(self.devkit_path, 'VOC2007')
@@ -38,7 +38,7 @@ class pascal_voc(object):
 
     def get(self):
         images = np.zeros((self.BatchSize, self.img_size, self.img_size, 3))
-        labels = np.zeros((self.BatchSize, self.s*self.s*35))
+        labels = np.zeros((self.BatchSize, self.s*self.s*30))
         count = 0
         while count < self.BatchSize:
             imgname = self.gt_labels[self.cursor]['imgname']
@@ -78,7 +78,7 @@ class pascal_voc(object):
                             # change the x's coord
                             label_cp[i, j, 1] = self.s - 1 - label_cp[i, j, 1]
                             label_cp[i, j, 6] = self.s - 1 - label_cp[i, j, 6]
-                            label_cp[i, j, 11] = self.s -1 - label_cp[i, j, 11]
+                            # label_cp[i, j, 11] = self.s -1 - label_cp[i, j, 11]
                 label_cp = self.label_concatenate(label_cp)
                 gt_labels_cp[idx]['label'] = label_cp
 
@@ -139,7 +139,7 @@ class pascal_voc(object):
         w_ratio = 1.0 * self.img_size / img.shape[1]
         # img = cv2.resize(img, [self.img_size, self.img_size])
 
-        label = np.zeros((self.s, self.s, 35))
+        label = np.zeros((self.s, self.s, 30))
         xml_name = os.path.join(self.data_path, 'Annotations', index + '.xml')
         tree = ET.parse(xml_name)
         objs = tree.findall('object')
@@ -162,11 +162,11 @@ class pascal_voc(object):
                 continue
             label[y_idx, x_idx, 0] = 1
             label[y_idx, x_idx, 5] = 1
-            label[y_idx, x_idx, 10] = 1
+            # label[y_idx, x_idx, 10] = 1
             label[y_idx, x_idx, 1: 5] = box
             label[y_idx, x_idx, 6: 10] = box
-            label[y_idx, x_idx, 11: 15] = box
-            label[y_idx, x_idx, 15 + cls_idx] = 1
+            # label[y_idx, x_idx, 11: 15] = box
+            label[y_idx, x_idx, 10 + cls_idx] = 1
 
         new_label = self.label_concatenate(label)
         return new_label, len(objs)
@@ -178,21 +178,27 @@ class pascal_voc(object):
         :return: new_label: (1, 1470)
         '''
         # class
-        label_class = label[:, :, 15:]
+        label_class = label[:, :, 10:]
         label_class = label_class.reshape((1, -1))
 
         # confidence
         label_conf_1 = label[:, :, 0]
         label_conf_2 = label[:, :, 5]
-        label_conf_3 = label[:, :, 10]
-        label_conf = np.concatenate([label_conf_1, label_conf_2, label_conf_3],
+        # label_conf_3 = label[:, :, 10]
+        label_conf = np.concatenate([label_conf_1,
+                                     label_conf_2,
+                                     #label_conf_3,
+                                     ],
                                     axis=0).reshape((1, -1))
 
         # box
         label_box_1 = label[:, :, 1: 5]
         label_box_2 = label[:, :, 6: 10]
-        label_box_3 = label[:, :, 11:15]
-        label_box = np.concatenate([label_box_1, label_box_2, label_box_3],
+        # label_box_3 = label[:, :, 11:15]
+        label_box = np.concatenate([label_box_1,
+                                    label_box_2,
+                                    # label_box_3,
+                                    ],
                                    axis=0).reshape((1, -1))
         new_label = np.concatenate([label_class, label_conf, label_box],
                                    axis=1)
@@ -213,19 +219,19 @@ class pascal_voc(object):
         label_conf = np.reshape(label[:, boundary1: boundary2], (self.s, self.s, self.b))
         label_conf_1 = label_conf[:, :, 0].reshape((7, 7, 1))
         label_conf_2 = label_conf[:, :, 1].reshape((7, 7, 1))
-        label_conf_3 = label_conf[:, :, 2].reshape((7, 7, 1))
+        # label_conf_3 = label_conf[:, :, 2].reshape((7, 7, 1))
 
         # box
         label_box = np.reshape(label[:, boundary2:], (self.s, self.s, 4*self.b))
         label_box_1 = label_box[:, :, : 4]
         label_box_2 = label_box[:, :, 4: 8]
-        label_box_3 = label_box[:, :, 8:]
+        # label_box_3 = label_box[:, :, 8:]
 
         origin_label = np.concatenate([label_conf_1,
                                        label_box_1,
                                        label_conf_2,
                                        label_box_2,
-                                       label_conf_3,
-                                       label_box_3,
+                                       # label_conf_3,
+                                       # label_box_3,
                                        label_class], axis=2)
         return origin_label

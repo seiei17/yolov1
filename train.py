@@ -33,7 +33,7 @@ w_decay = 0.001
 #     print('Now begin {}th training: ---------'.format(i+1))
 #     net.train(pascal, epoch, init_lr)
 
-net = yolov1(BatchSize=BatchSize, w_decay=w_decay)
+net = yolov1(B=2, BatchSize=BatchSize, w_decay=w_decay)
 pascal = pascal_voc(PASCAL_PATH=PASCAL_PATH, TrainOrTest='train', BatchSize=BatchSize)
 print('------------\nnow begin training\n-------------')
 net.train(pascal, epochs=300, lr=lr)
