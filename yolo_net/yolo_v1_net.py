@@ -20,7 +20,7 @@ from keras.callbacks import ModelCheckpoint
 from math import ceil
 import os
 
-from yolo_net.yolo_v1_utils import YoloUtils
+from yolo_net.yolo_v1_utils import YoloTrainUtils
 
 
 class yolov1:
@@ -28,7 +28,7 @@ class yolov1:
                  num_classes=20, BatchSize=128,
                  w_decay=1e-4,
                  leaky_alpha=0.1,
-                 dropout_rate=0.5):
+                 dropout_rate=0.4):
         '''
         initial method of yolov1.
         :param S: # of grid;
@@ -207,49 +207,32 @@ class yolov1:
         net['bn24'] = BatchNormalization(axis=3)(net['conv24'])
         net['lr24'] = LeakyReLU(self.alpha)(net['bn24'])
 
-        # fc 版本
         net['local_conv'] = Conv2D(256, (3, 3),
                               padding='same',
                               kernel_regularizer=l2(self.w_decay),
                               kernel_initializer=initial(),
                               )(net['lr24'])
         net['local_lr'] = LeakyReLU(self.alpha)(net['local_conv'])
+
         net['reduce_conv'] = Conv2D(128, (1, 1),
                                     padding='same',
                                     kernel_regularizer=l2(self.w_decay),
                                     kernel_initializer=initial(),
                                     )(net['local_lr'])
         net['reduce_lr'] = LeakyReLU(self.alpha)(net['reduce_conv'])
+
         net['flat'] = Flatten()(net['reduce_lr'])
         net['dropout'] = Dropout(self.dropout_rate)(net['flat'])
         net['fc26'] = Dense(self.output_size, activation='linear')(net['dropout'])
         net['output'] = net['fc26']
-        # net['conv25'] = Conv2D(256, (1, 1),
-        #                        padding='same',
-        #                        kernel_regularizer=l2(self.w_decay),
-        #                        kernel_initializer=initial(),
-        #                        use_bias=False,
-        #                        )(net['lr24'])
-        # net['bn25'] = BatchNormalization(axis=3)(net['conv25'])
-        # net['lr25'] = LeakyReLU(self.alpha)(net['bn25'])
-        #
-        # net['dropout'] = Dropout(self.dropout_rate)(net['lr25'])
-        #
-        # net['conv26'] = Conv2D(30, (1, 1),
-        #                        padding='same',
-        #                        activation='linear',
-        #                        kernel_regularizer=l2(self.w_decay),
-        #                        kernel_initializer=initial(),
-        #                        )(net['dropout'])
-        # net['output'] = net['conv26']
 
         model = Model(net['input'], net['output'])
-        model.summary()
+        # model.summary()
         return model
 
     def train(self, pascal, epochs, lr):
         checkpoint = './history/YOLOv1_weight.h5'
-        yoloutils = YoloUtils(self.num_classes, B=self.B, batch_size=self.BatchSize)
+        yoloutils = YoloTrainUtils(self.num_classes, B=self.B, batch_size=self.BatchSize)
         model = self.yolov1_net()
         loss = yoloutils.loss_layer
         opt = Adam(lr)
