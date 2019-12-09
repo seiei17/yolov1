@@ -230,8 +230,9 @@ class yolov1:
         # model.summary()
         return model
 
-    def train(self, pascal, epochs, lr):
-        checkpoint = './history/YOLOv1_weight.h5'
+    def train(self, pascal, epochs, lr, check_path):
+        checkpoint = check_path
+
         yoloutils = YoloTrainUtils(self.num_classes, B=self.B, batch_size=self.BatchSize)
         model = self.yolov1_net()
         loss = yoloutils.loss_layer
@@ -247,7 +248,7 @@ class yolov1:
         model.compile(optimizer=opt, loss=loss, metrics=['accuracy'])
 
         if os.path.isfile(checkpoint):
-            print('---\nload weights from {}\n----'.format(checkpoint))
+            print('---------------------\nload weights from {}\n----------------------'.format(checkpoint))
             model.load_weights(checkpoint, by_name=True)
 
 

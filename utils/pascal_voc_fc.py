@@ -77,8 +77,8 @@ class pascal_voc(object):
                     for j in range(self.s):
                         if label_cp[i, j, 0] == 1:
                             # change the x's coord
-                            label_cp[i, j, 1] = self.s - 1 - label_cp[i, j, 1]
-                            label_cp[i, j, 6] = self.s - 1 - label_cp[i, j, 6]
+                            label_cp[i, j, 1] = self.img_size - 1 - label_cp[i, j, 1]
+                            label_cp[i, j, 6] = self.img_size - 1 - label_cp[i, j, 6]
                             # label_cp[i, j, 11] = self.s -1 - label_cp[i, j, 11]
                 label_cp = self.label_concatenate(label_cp)
                 gt_labels_cp[idx]['label'] = label_cp

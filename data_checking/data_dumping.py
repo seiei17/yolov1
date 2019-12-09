@@ -10,15 +10,15 @@ CLASSES = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus',
            'motorbike', 'person', 'pottedplant', 'sheep', 'sofa',
            'train', 'tvmonitor']
 
-
 class pascal_voc(object):
-    def __init__(self, PASCAL_PATH, TrainOrTest, S=7, B=2, FLIPPED=True, REBUILD=False):
+    def __init__(self, PASCAL_PATH, TrainOrTest, BatchSize, S=7, B=2, FLIPPED=True, REBUILD=False):
         self.pascal_path = PASCAL_PATH
         self.devkit_path = os.path.join(self.pascal_path, 'VOCdevkit')
         self.data_path = os.path.join(self.devkit_path, 'VOC2007')
         self.cache_path = os.path.join(self.pascal_path, 'cache')
         self.img_size = 448
         self.cls = CLASSES
+        self.BatchSize = BatchSize
         self.s = S
         self.b = B
         self.one_vec = self.s * self.s * (self.b * 5 + 20)
@@ -29,14 +29,95 @@ class pascal_voc(object):
         self.cursor = 0
         self.epoch = 1
         self.gt_labels = None
+        self.gt_labels_cp = None
         self.len = 0
-        self.load_labels()
+        self.prepare()
+
+    def generator(self):
+        while True:
+            images, labels, imgname = self.get()
+            yield images, labels, imgname
+
+    def get(self):
+        images = np.zeros((self.BatchSize, self.img_size, self.img_size, 3))
+        labels = np.zeros((self.BatchSize, self.one_vec))
+        count = 0
+        while count < self.BatchSize:
+            imgname = self.gt_labels[self.cursor]['imgname']
+            flipped = self.gt_labels[self.cursor]['flipped']
+            images[count, :, :, :] = self.image_read(imgname, flipped)
+
+
+            labels[count] = self.gt_labels[self.cursor]['label']
+            count += 1
+            self.cursor += 1
+            if self.cursor >= len(self.gt_labels):
+                np.random.shuffle(self.gt_labels)
+                self.cursor = 0
+                self.epoch += 1
+
+        imgname = os.path.join('../', imgname)
+
+        return images, labels, imgname
+
+    def image_read(self, imgname, flipped=False):
+        imgname = os.path.join('../', imgname)
+        image = cv2.imread(imgname)#.astype('float32')
+        image = cv2.resize(image, (self.img_size, self.img_size))
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
+        image = (image / 255.0) * 2.0 - 1.0
+        if flipped:
+            image = image[:, ::-1, :]
+
+        return image
+
+    def prepare(self):
+        gt_labels = self.load_labels()
+        if self.flipped:
+            print('Appending horizontally-flipped training examples ...')
+            gt_labels_cp = copy.deepcopy(gt_labels)
+            for idx in range(len(gt_labels_cp)):
+                gt_labels_cp[idx]['flipped'] = True
+                label_cp = gt_labels_cp[idx]['label']
+                label_cp = self.label_depart(label_cp)
+                label_cp = label_cp[:, ::-1, :]
+
+                label = gt_labels[idx]['label']
+                label = self.label_depart(label
+                                          )
+                for i in range(self.s):
+                    for j in range(self.s):
+                        if label_cp[i, j, 0] == 1:
+                            # change the x's coord
+                            label_cp[i, j, 1] = self.img_size - 1 - label_cp[i, j, 1]
+                            label_cp[i, j, 6] = self.img_size - 1 - label_cp[i, j, 6]
+
+
+                            # label_cp[i, j, 11] = self.s -1 - label_cp[i, j, 11]
+                label_cp = self.label_concatenate(label_cp)
+                gt_labels_cp[idx]['label'] = label_cp
+
+            gt_labels += gt_labels_cp
+        np.random.shuffle(gt_labels)
+        self.gt_labels = gt_labels
+        self.gt_labels_cp = gt_labels_cp
+        self.len = len(gt_labels)
+        return gt_labels
 
     def load_labels(self):
         cache_file = os.path.join(self.cache_path,
                                   'pascal_' +
                                   self.TrainOrTest +
                                   '_gt_labels.pkl')
+        # if cache file is existing and no need to rebuild,
+        # then just load pkl file.
+        if os.path.isfile(cache_file) and not self.rebuild:
+            print('Loading gt_labels from: ' + cache_file)
+            with open(cache_file, 'rb') as cachefile:
+                gt_labels = pickle.load(cachefile)
+            return gt_labels
+
+        print('Processing gt_labels from: ' + self.data_path)
 
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)
@@ -45,18 +126,22 @@ class pascal_voc(object):
             txtname = os.path.join(self.data_path, 'ImageSets', 'Main', 'trainval.txt')
         else:
             txtname = os.path.join(self.data_path, 'ImageSets', 'Main', 'val.txt')
-        self.image_index = '000033'
+        with open(txtname, 'r') as file:
+            self.image_index = [x.strip() for x in file.readlines()]
 
         gt_labels = []
-        index = self.image_index
-        label, num = self.load_pascal_annotation(index)
-        imgname = os.path.join(self.data_path, 'JPEGImages', index + '.jpg')
-        gt_labels.append({'imgname': imgname,
-                          'label': label,
-                          'flipped': False})
+        for index in self.image_index:
+            label, num = self.load_pascal_annotation(index)
+            if num == 0:
+                continue
+            imgname = os.path.join(self.data_path, 'JPEGImages', index + '.jpg')
+            gt_labels.append({'imgname': imgname,
+                              'label': label,
+                              'flipped': False})
         print('Saving gt_labels to: ' + cache_file)
         with open(cache_file, 'wb') as file:
             pickle.dump(gt_labels, file)
+        return gt_labels
 
     def load_pascal_annotation(self, index):
         '''
@@ -70,7 +155,7 @@ class pascal_voc(object):
         w_ratio = 1.0 * self.img_size / img.shape[1]
         # img = cv2.resize(img, [self.img_size, self.img_size])
 
-        label = np.zeros((self.s, self.s, self.b * 5 + 20))
+        label = np.zeros((self.s, self.s, self.b*5 + 20))
         xml_name = os.path.join(self.data_path, 'Annotations', index + '.xml')
         tree = ET.parse(xml_name)
         objs = tree.findall('object')
@@ -98,7 +183,6 @@ class pascal_voc(object):
             label[y_idx, x_idx, 6: 10] = box
             # label[y_idx, x_idx, 11: 15] = box
             label[y_idx, x_idx, 10 + cls_idx] = 1
-            print(label[y_idx, x_idx])
 
         new_label = self.label_concatenate(label)
         return new_label, len(objs)
@@ -110,10 +194,8 @@ class pascal_voc(object):
         :return: new_label: (1, 1470)
         '''
         # class
-        print()
         label_class = label[:, :, self.b * 5:]
-        label_class_t = label_class.reshape((1, -1))
-
+        label_class = label_class.reshape((1, -1))
 
         # confidence
         label_conf_1 = label[:, :, 0].reshape((7, 7, 1))
@@ -121,11 +203,9 @@ class pascal_voc(object):
         # label_conf_3 = label[:, :, 10]
         label_conf = np.concatenate([label_conf_1,
                                      label_conf_2,
-                                     # label_conf_3,
+                                     #label_conf_3,
                                      ],
-                                    axis=2)
-        label_conf_t = label_conf.reshape((1, -1))
-
+                                    axis=2).reshape((1, -1))
 
         # box
         label_box_1 = label[:, :, 1: 5]
@@ -135,20 +215,8 @@ class pascal_voc(object):
                                     label_box_2,
                                     # label_box_3,
                                     ],
-                                   axis=2)
-        label_box_t = label_box.reshape((1, -1))
-
-
-        for i in range(7):
-            for j in range(7):
-                if label_conf[i, j, 0] == 1:
-                    print()
-                    print(label_conf[i, j, 0])
-                    print(label_class[i, j])
-                    print(label_box[i, j, :4])
-
-
-        new_label = np.concatenate([label_class_t, label_conf_t, label_box_t],
+                                   axis=2).reshape((1, -1))
+        new_label = np.concatenate([label_class, label_conf, label_box],
                                    axis=1)
         return new_label
 
@@ -170,7 +238,7 @@ class pascal_voc(object):
         # label_conf_3 = label_conf[:, :, 2].reshape((7, 7, 1))
 
         # box
-        label_box = np.reshape(label[:, boundary2:], (self.s, self.s, 4 * self.b))
+        label_box = np.reshape(label[:, boundary2:], (self.s, self.s, 4*self.b))
         label_box_1 = label_box[:, :, : 4]
         label_box_2 = label_box[:, :, 4: 8]
         # label_box_3 = label_box[:, :, 8:]
